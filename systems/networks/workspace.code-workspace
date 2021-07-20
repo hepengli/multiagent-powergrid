@@ -1,0 +1,10 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../../../opt/anaconda3/envs/power/lib/python3.8/site-packages/pandapower"
+		}
+	]
+}
