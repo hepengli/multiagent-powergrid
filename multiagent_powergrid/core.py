@@ -254,9 +254,9 @@ class ESS(Agent):
 
         self.safety = safety
 
-    def reset(self, rnd):
+    def reset(self, rnd, init_soc=None):
         # generation
-        self.state.soc = rnd.uniform(self.min_soc, self.max_soc) if self.init_soc is None else self.init_soc
+        self.state.soc = rnd.uniform(self.min_soc, self.max_soc) if init_soc is None else init_soc
 
     def feasible_action(self):
         max_discharge_power = (self.state.soc - self.min_soc) * self.max_e_mwh * self.dsc_eff / self.dt

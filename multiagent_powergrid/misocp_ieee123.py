@@ -226,13 +226,12 @@ for d in range(366):
             model.addCons(I_SR[t,ij]*V_SR[t,i] >= P_IJ[t,ij]*P_IJ[t,ij] + Q_IJ[t,ij]*Q_IJ[t,ij])
     model.setObjective(quicksum(DG1_cost[t]+DG3_cost[t]+DG4_cost[t]+GRID_cost[t] for t in range(time_steps)))
     model.hideOutput()
-    model.setRealParam('limits/time', 300)
+    model.setRealParam('limits/time', 60)
     model.optimize()
     obj = model.getObjVal()
     sol = model.getBestSol()
     print('Day {} is done!'.format(d))
     cost.append(obj)
-
     v_pu = np.empty([time_steps, n_buses])
     for t in range(time_steps):
         for i in range(n_buses-1):
@@ -326,7 +325,7 @@ for d in range(366):
             PG[t,bus2id['Bus 83']]  * wind_scale[d,t]
         p_renew.append(p)
     for t in range(time_steps):
-        print(p_grid[t]+p_dg1[t]+p_dg3[t]+p_dg4[t]+p_renew[t]+p1_s[t]+p2_s[t]+p2_s[t], np.sum(pd * load_scale[d,t]))
+        print(p_grid[t]+p_dg1[t]+p_dg3[t]+p_dg4[t]+p_renew[t]+p1_s[t]+p2_s[t], np.sum(pd * load_scale[d,t]))
         print(q_grid[t]+q_dg1[t]+q_dg3[t]+q_dg4[t]-cap1[t]*(-0.3)-cap2[t]*(-0.3), np.sum(qd * load_scale[d,t]))
     # dg1_cost, dg2_cost, grid_cost = 0, 0, 0
     # for t in range(time_steps):
@@ -334,7 +333,6 @@ for d in range(366):
     #     dg2_cost += a2 * (p_dg2[t]**2) + b2 * p_dg2[t] + c2
     #     grid_cost += price[d,t] * p_grid[t]
     # print(dg1_cost+dg2_cost+grid_cost)
-
     schedues[d] = {
         'grid_P': p_grid, 
         'grid_Q': q_grid, 
@@ -358,12 +356,13 @@ for d in range(366):
         'current': i_pu, 
     }
 
+    print(cost)
 
-import pickle, os
-save_path = '/home/lihepeng/Documents/Github/learning2opDN/results/test/misocp_ieee123.pkl'
-with open(save_path, 'wb') as f:
-    pickle.dump({'cost': cost, 'schedues': schedues}, f, protocol=pickle.HIGHEST_PROTOCOL)
-print('done')
+# import pickle, os
+# save_path = '/home/lihepeng/Documents/Github/learning2opDN/results/test/misocp_ieee123.pkl'
+# with open(save_path, 'wb') as f:
+#     pickle.dump({'cost': cost, 'schedues': schedues}, f, protocol=pickle.HIGHEST_PROTOCOL)
+# print('done')
 
 # import pickle, os
 # save_path = '/home/lihepeng/Documents/Github/learning2opDN/results/test/misocp_ieee123.pkl'
