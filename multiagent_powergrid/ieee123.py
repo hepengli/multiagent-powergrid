@@ -108,7 +108,6 @@ class IEEE123BusSystem(gym.Env):
         if len(action_space) > 1:
             # all action spaces are discrete, so simplify to MultiDiscrete action space
             self.action_space = gym.spaces.Tuple(action_space)
-
             self.action_space.shape = (action_shape,)
         else:
             self.action_space = action_space[0]

@@ -6,6 +6,7 @@ multiagent_powergrid/environment_3ph.py
 multiagent_powergrid/environment_cigre_lv.py
 multiagent_powergrid/environment_ieee34_ddpg.py
 multiagent_powergrid/ieee123.py
+multiagent_powergrid/ieee123_ddpg.py
 multiagent_powergrid/ieee34.py
 multiagent_powergrid/misocp.py
 multiagent_powergrid/misocp_ieee123.py
