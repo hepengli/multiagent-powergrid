@@ -203,7 +203,7 @@ def IEEE34Bus():
     pp.create_shunt_as_capacitor(net, bus_864, q_mvar=-0.12, name='SCB 2', step=0, max_step=4, loss_factor=0.0)
 
     # # storage
-    # pp.create_storage(net, bus_810, p_mw=0.5, max_e_mwh=2, sn_mva=1.0, soc_percent=50, min_e_mwh=0.2, name='Storage')
+    pp.create_storage(net, bus_810, p_mw=0.0, max_e_mwh=2, sn_mva=1.0, soc_percent=50, min_e_mwh=0.2, name='Storage')
 
     return net
 

@@ -16,6 +16,7 @@ def read_data():
     data = pickle.load(f)
     f.close()
     return data
+
 # environment for all agents in the multiagent world
 # currently code assumes that no agents will be created/destroyed at runtime!
 class IEEE34BusSystem(gym.Env):
@@ -24,6 +25,7 @@ class IEEE34BusSystem(gym.Env):
         self.kwargs = kwargs
         self.train = kwargs.get('train')
         self.AC = kwargs.get('AC') # AC power flow
+        self.topology = kwargs.get('topology') # AC power flow
         self.dataset = read_data()['train'] if self.train else read_data()['test']
         self.total_timesteps = self.dataset['solar'].size
         self.total_days = self.dataset['solar'].size//24
@@ -31,7 +33,6 @@ class IEEE34BusSystem(gym.Env):
         self.t = 0 # timestep counter
         self.dt = 1 # simulation timestep
         self.window = 24
-        self.day = -2
 
         # network architecture
         self.net = IEEE34Bus()
@@ -152,46 +153,18 @@ class IEEE34BusSystem(gym.Env):
         # update agent state
         self._update_agent_state()
         # runpf
-        net, vm, loading = self._update_net_state()
-        if net["converged"]:
-            # update power flow safety
-            overloading = np.maximum(loading - 100, 0).sum()
-            overvoltage = np.maximum(vm - 1.05, 0).sum()
-            undervoltage = np.maximum(0.95 - vm, 0).sum()
-            # reward and safety
-            reward, safety = 0, 0
-            safety += overloading / 100 + overvoltage + undervoltage
-            for agent in self.agents:
-                reward -= agent.cost
-                safety += agent.safety
-                # print(agent.name, agent.cost, agent.safety)
-                # if agent.safety > 0:
-                #     print(agent.name, agent.safety)
-        else:
-            reward = -200.0
-            safety = 2.0
-            print('Doesn\'t converge!')
-            print(net["converged"])
-
-        if self.kwargs.get('penalty_coef'):
-            reward -= safety * self.kwargs.get('penalty_coef')
-
-        if self.kwargs.get('safety_scale'):
-            safety *= self.kwargs.get('safety_scale')
-
+        net = self._update_net_state()
+        # get reward
+        reward, info = self._reward_and_safety(net)
         # update past observation
         self.past_load.append(self.dataset['load'][self.t])
         self.past_wind.append(self.dataset['wind'][self.t])
         self.past_solar.append(self.dataset['solar'][self.t])
         self.past_price.append(self.dataset['price_sigmoid'][self.t])
-
         # timestep counter
         self.t += 1
         if self.t >= self.total_timesteps:
             self.t = 0
-
-        # info
-        info = {'s': safety, 'load': net.res_load.p_mw.sum(), 'loading': loading, 'voltage': vm}
 
         return self._get_obs(), reward, False, info
 
@@ -228,12 +201,13 @@ class IEEE34BusSystem(gym.Env):
                 agent.update_state()
             elif agent.type in ['SCB']:
                 agent.update_state()
+            elif agent.type in ['SW']:
+                agent.update_state()
             else:
                 pass
 
     def _update_net_state(self):
         net = self.net
-
         # update load info at all buses
         net.load.scaling = self.dataset['load'][self.t]
         # update sgen info at all buese
@@ -241,14 +215,18 @@ class IEEE34BusSystem(gym.Env):
         net.sgen.q_mvar = [agent.state.Q for agent in self.dg_agents + self.res_agents]
         net.shunt.step = [agent.state.step for agent in self.shunt_agents]
         net.storage.p_mw = [agent.state.P for agent in self.ess_agents]
-        # update trafo info
+        if self.topology == 'varying':
+            if np.random.rand < 0.05:
+                net.switch.closed = True
+                opening_switch_id = np.random.choice(len(self.switch_agents))
+                net.switch.closed[opening_switch_id] = False
+                for closed, agent in zip(net.switch.closed.values, self.switch_agents):
+                    agent.state.closed = closed
+        # # update trafo info
         net.trafo.tap_pos[:len(self.tap_agents)] = [agent.state.tap_position for agent in self.tap_agents]
-
         # runpf
         try:
             pp.runpp(net) if self.AC else pp.rundcpp(net)
-            vm = net.res_bus.vm_pu.values
-            loading = net.res_line.loading_percent.values
             # update grid state
             for agent in self.grid_agent:
                 pgrid = net.res_ext_grid.p_mw.values[0]
@@ -263,21 +241,56 @@ class IEEE34BusSystem(gym.Env):
                 assert agent.cost is not np.nan
                 assert agent.safety is not np.nan
         except:
-            vm, loading = np.nan, np.nan
+            pass
 
-        return net, vm, loading
+        return net
+
+    def _reward_and_safety(self, net):
+        if net["converged"]:
+            # reward and safety
+            reward, safety = 0, 0
+            for agent in self.agents:
+                reward -= agent.cost
+                safety += agent.safety
+            # update power flow safety
+            vm = net.res_bus.vm_pu.values
+            loading = net.res_line.loading_percent.values
+            overloading = np.maximum(loading - 100, 0).sum()
+            overvoltage = np.maximum(vm - 1.05, 0).sum()
+            undervoltage = np.maximum(0.95 - vm, 0).sum()
+            safety += overloading / 100 + overvoltage + undervoltage
+        else:
+            reward = -200.0
+            safety = 2.0
+            vm, loading = np.nan, np.nan
+            print('Doesn\'t converge!')
+
+        if self.kwargs.get('penalty_coef'):
+            reward -= safety * self.kwargs.get('penalty_coef')
+        if self.kwargs.get('safety_scale'):
+            safety *= self.kwargs.get('safety_scale')
+        # info
+        info = {'s': safety}
+        info['load'] = net.res_load.p_mw.sum()
+        info['loading'] = loading
+        info['voltage'] = vm
+        
+        return reward, info
 
     def reset(self, day=None, seed=None):
         # which day
         if day is None:
             day = self.rnd.randint(self.total_days-1)
+        else:
+            self.day = day
         # which hour
         self.t = day * 24
         # reset all agents
         if seed is not None:
             self.rnd, seed = seeding.np_random(seed)
-        # for agent in self.agents:
-        #     agent.reset(self.rnd)
+        if self.train:
+            for agent in self.agents:
+                agent.reset(self.rnd)
 
         t, w, dataset = self.t, self.window, self.dataset
         if t-w >= 0:
